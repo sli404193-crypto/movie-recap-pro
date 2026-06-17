@@ -28,10 +28,11 @@
 - [x] Create responsive layout that works on mobile and desktop
 - [x] Design form components with cinematic styling
 - [x] Design buttons, inputs, and cards with dramatic aesthetic
+- [x] Create script generation loading state with cinematic animations
 
 ### Authentication & User Management
 - [x] Verify Manus OAuth is properly configured in project
-- [ ] Test login/logout flow
+- [x] Test login/logout flow
 - [x] Ensure user context is available in protected procedures
 - [x] Implement user profile display in navigation
 
@@ -42,9 +43,9 @@
 - [x] Implement word count calculation based on length selection
 
 ### Testing
-- [ ] Write vitest tests for `scripts.generate` procedure
-- [ ] Write vitest tests for `scripts.list` procedure
-- [ ] Write vitest tests for `scripts.delete` procedure
+- [x] Write vitest tests for `scripts.generate` procedure
+- [x] Write vitest tests for `scripts.list` procedure
+- [x] Write vitest tests for `scripts.delete` procedure
 
 ## Phase 2: Advanced Features & Refinements
 
