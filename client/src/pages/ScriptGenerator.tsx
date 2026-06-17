@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
+import { GenerationLoadingOverlay } from "@/components/GenerationLoadingOverlay";
 import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useState } from "react";
@@ -75,7 +76,9 @@ export default function ScriptGenerator() {
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-black via-slate-900 to-black py-12 px-4">
+    <>
+      {generateMutation.isPending && <GenerationLoadingOverlay />}
+      <div className="min-h-screen bg-gradient-to-br from-black via-slate-900 to-black py-12 px-4">
       {/* Atmospheric background elements */}
       <div className="fixed inset-0 pointer-events-none overflow-hidden">
         <div className="absolute top-0 right-0 w-96 h-96 bg-amber-900/10 rounded-full blur-3xl"></div>
@@ -224,5 +227,6 @@ export default function ScriptGenerator() {
         </div>
       </div>
     </div>
+    </>
   );
 }

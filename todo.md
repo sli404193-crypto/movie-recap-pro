@@ -74,7 +74,7 @@
 
 ### Export & Integration
 - [ ] Add PDF export option
-- [ ] Add Markdown export option
+- [x] Add Markdown export option
 - [ ] Add SRT subtitle format export
 - [ ] Integrate with external APIs for movie data (OMDB, TMDB)
 - [ ] Add automatic movie metadata fetching
@@ -92,7 +92,7 @@
 - [ ] Implement usage tracking for different tones/lengths
 
 ### UI/UX Refinements
-- [ ] Add more cinematic animations and transitions
+- [x] Add more cinematic animations and transitions (GenerationLoadingOverlay with progress, staged text)
 - [ ] Implement dark mode toggle (if needed)
 - [ ] Add accessibility features (ARIA labels, keyboard navigation)
 - [ ] Create onboarding flow for new users

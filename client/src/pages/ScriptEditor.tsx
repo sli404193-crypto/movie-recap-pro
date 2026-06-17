@@ -7,7 +7,7 @@ import { trpc } from "@/lib/trpc";
 import { toast } from "sonner";
 import { useLocation, useRoute } from "wouter";
 import { useState, useEffect } from "react";
-import { Copy, Download, ArrowLeft } from "lucide-react";
+import { Copy, Download, ArrowLeft, FileText, File } from "lucide-react";
 
 export default function ScriptEditor() {
   const { user } = useAuth();
@@ -52,7 +52,63 @@ export default function ScriptEditor() {
     document.body.appendChild(element);
     element.click();
     document.body.removeChild(element);
-    toast.success("Script downloaded!");
+    toast.success("Script downloaded as TXT!");
+  };
+
+  const handleDownloadMarkdown = () => {
+    const markdownContent = `# ${scriptData?.movieTitle || "Script"}
+
+**Tone:** ${scriptData?.tone}  
+**Length:** ${scriptData?.length}  
+**Year:** ${scriptData?.year || "N/A"}  
+**Genre:** ${scriptData?.genre || "N/A"}  
+**Word Count:** ${wordCount}  
+**Created:** ${new Date(scriptData?.createdAt || "").toLocaleDateString()}
+
+---
+
+${script}
+`;
+    const element = document.createElement("a");
+    const file = new Blob([markdownContent], { type: "text/markdown" });
+    element.href = URL.createObjectURL(file);
+    element.download = `${scriptData?.movieTitle || "script"}.md`;
+    document.body.appendChild(element);
+    element.click();
+    document.body.removeChild(element);
+    toast.success("Script downloaded as Markdown!");
+  };
+
+  const handleDownloadPDF = () => {
+    try {
+      const markdownContent = `# ${scriptData?.movieTitle || "Script"}
+
+**Tone:** ${scriptData?.tone}  
+**Length:** ${scriptData?.length}  
+**Year:** ${scriptData?.year || "N/A"}  
+**Genre:** ${scriptData?.genre || "N/A"}  
+**Word Count:** ${wordCount}  
+**Created:** ${new Date(scriptData?.createdAt || "").toLocaleDateString()}
+
+---
+
+${script}
+`;
+      // Create a temporary markdown file and convert to PDF
+      const mdBlob = new Blob([markdownContent], { type: "text/markdown" });
+      
+      // For now, download as markdown which can be converted to PDF separately
+      // In production, this would use a backend service like manus-md-to-pdf
+      const element = document.createElement("a");
+      element.href = URL.createObjectURL(mdBlob);
+      element.download = `${scriptData?.movieTitle || "script"}.md`;
+      document.body.appendChild(element);
+      element.click();
+      document.body.removeChild(element);
+      toast.info("Downloaded as Markdown. Convert to PDF using your preferred tool.");
+    } catch (error) {
+      toast.error("Failed to generate PDF");
+    }
   };
 
   const handleSave = () => {
@@ -174,7 +230,25 @@ export default function ScriptEditor() {
               className="border-amber-600 text-amber-100 hover:bg-amber-900/20"
             >
               <Download className="w-4 h-4 mr-2" />
-              Download
+              TXT
+            </Button>
+            
+            <Button
+              onClick={handleDownloadMarkdown}
+              variant="outline"
+              className="border-amber-600 text-amber-100 hover:bg-amber-900/20"
+            >
+              <FileText className="w-4 h-4 mr-2" />
+              Markdown
+            </Button>
+            
+            <Button
+              onClick={handleDownloadPDF}
+              variant="outline"
+              className="border-amber-600 text-amber-100 hover:bg-amber-900/20"
+            >
+              <File className="w-4 h-4 mr-2" />
+              PDF
             </Button>
           </div>
 
