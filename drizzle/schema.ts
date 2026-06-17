@@ -25,4 +25,20 @@ export const users = mysqlTable("users", {
 export type User = typeof users.$inferSelect;
 export type InsertUser = typeof users.$inferInsert;
 
-// TODO: Add your tables here
+export const scripts = mysqlTable("scripts", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  movieTitle: varchar("movieTitle", { length: 255 }).notNull(),
+  year: int("year"),
+  genre: varchar("genre", { length: 100 }),
+  plotSummary: text("plotSummary"),
+  tone: mysqlEnum("tone", ["Dramatic", "Comedic", "Suspenseful", "Educational", "Casual"]).default("Dramatic").notNull(),
+  length: mysqlEnum("length", ["Short", "Medium", "Long"]).default("Medium").notNull(),
+  generatedScript: text("generatedScript").notNull(),
+  wordCount: int("wordCount").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+
+export type Script = typeof scripts.$inferSelect;
+export type InsertScript = typeof scripts.$inferInsert;

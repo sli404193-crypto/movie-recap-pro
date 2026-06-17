@@ -1,6 +1,6 @@
-import { eq } from "drizzle-orm";
+import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertUser, users } from "../drizzle/schema";
+import { InsertScript, InsertUser, scripts, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -89,4 +89,63 @@ export async function getUserByOpenId(openId: string) {
   return result.length > 0 ? result[0] : undefined;
 }
 
-// TODO: add feature queries here as your schema grows.
+export async function createScript(script: InsertScript) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  const result = await db.insert(scripts).values(script);
+  return result;
+}
+
+export async function getUserScripts(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  return await db
+    .select()
+    .from(scripts)
+    .where(eq(scripts.userId, userId))
+    .orderBy((s) => desc(s.createdAt));
+}
+
+export async function getScriptById(scriptId: number, userId: number) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  const result = await db
+    .select()
+    .from(scripts)
+    .where(and(eq(scripts.id, scriptId), eq(scripts.userId, userId)))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function updateScript(
+  scriptId: number,
+  userId: number,
+  updates: Partial<InsertScript>
+) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  return await db
+    .update(scripts)
+    .set(updates)
+    .where(and(eq(scripts.id, scriptId), eq(scripts.userId, userId)));
+}
+
+export async function deleteScript(scriptId: number, userId: number) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  return await db
+    .delete(scripts)
+    .where(and(eq(scripts.id, scriptId), eq(scripts.userId, userId)));
+}
+
+// TODO: add additional feature queries here as your schema grows.
