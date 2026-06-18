@@ -189,6 +189,160 @@ Format the script with clear section headers and make it suitable for narration.
         return { success: true };
       }),
   }),
+
+  videoTranscripts: router({
+    extractTranscript: protectedProcedure
+      .input(
+        z.object({
+          videoUrl: z.string().optional(),
+          videoFileName: z.string().optional(),
+          sourceLanguage: z.enum(["English", "Chinese", "Myanmar"]).default("English"),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        // For now, return a placeholder for transcript extraction
+        // In production, this would use a video-to-text service
+        const placeholderTranscript = "[Extracted transcript will appear here after video processing]";
+        
+        return {
+          rawTranscript: placeholderTranscript,
+          sourceLanguage: input.sourceLanguage,
+        };
+      }),
+    
+    convertToScript: protectedProcedure
+      .input(
+        z.object({
+          rawTranscript: z.string().min(10),
+          sourceLanguage: z.enum(["English", "Chinese", "Myanmar"]),
+          targetLanguage: z.enum(["English", "Chinese", "Myanmar"]),
+          videoFileName: z.string().optional(),
+        })
+      )
+      .mutation(async ({ ctx, input }) => {
+        const { invokeLLM } = await import("./_core/llm");
+        
+        const languageNames: Record<string, string> = {
+          English: "English",
+          Chinese: "Simplified Chinese",
+          Myanmar: "Myanmar (Burmese)",
+        };
+        
+        const prompt = `You are a professional movie recap script writer. Convert the following video dialogue/transcript into a well-structured movie recap script.
+
+Source Language: ${languageNames[input.sourceLanguage]}
+Target Language: ${languageNames[input.targetLanguage]}
+
+Original Transcript:
+${input.rawTranscript}
+
+Please:
+1. Analyze the dialogue and extract key plot points
+2. Create a structured movie recap script with:
+   - An engaging introduction
+   - Act-by-act breakdown
+   - Key character moments
+   - A compelling conclusion
+3. Write the entire script in ${languageNames[input.targetLanguage]}
+4. Make it suitable for narration
+5. Maintain a professional, cinematic tone
+
+Format with clear section headers.`;
+        
+        try {
+          const response = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: `You are a professional movie recap script writer who creates engaging, well-structured scripts in multiple languages. You specialize in converting raw dialogue into polished movie recap scripts. Always respond in the target language specified.`,
+              },
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+          });
+          
+          const content = response.choices[0]?.message.content;
+          let generatedScript = "";
+          
+          if (typeof content === "string") {
+            generatedScript = content.trim();
+          } else if (Array.isArray(content)) {
+            generatedScript = content
+              .filter((block: any) => block.type === "text")
+              .map((block: any) => block.text)
+              .join("\n")
+              .trim();
+          }
+          
+          if (!generatedScript || generatedScript.length < 50) {
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: "Generated script is too short. Please provide a longer transcript.",
+            });
+          }
+          
+          const wordCount = generatedScript.split(/\s+/).length;
+          
+          // Save to database
+          const { createVideoTranscript } = await import("./db");
+          await createVideoTranscript({
+            userId: ctx.user.id,
+            videoFileName: input.videoFileName,
+            sourceLanguage: input.sourceLanguage,
+            targetLanguage: input.targetLanguage,
+            rawTranscript: input.rawTranscript,
+            generatedScript,
+            wordCount,
+          });
+          
+          return {
+            generatedScript,
+            wordCount,
+            targetLanguage: input.targetLanguage,
+          };
+        } catch (error) {
+          console.error("Video script conversion error:", error);
+          
+          if (error instanceof TRPCError) {
+            throw error;
+          }
+          
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error instanceof Error ? error.message : "Failed to convert transcript to script.",
+          });
+        }
+      }),
+    
+    list: protectedProcedure.query(async ({ ctx }) => {
+      const { getUserVideoTranscripts } = await import("./db");
+      return await getUserVideoTranscripts(ctx.user.id);
+    }),
+    
+    getById: protectedProcedure
+      .input(z.object({ transcriptId: z.number() }))
+      .query(async ({ ctx, input }) => {
+        const { getVideoTranscriptById } = await import("./db");
+        const transcript = await getVideoTranscriptById(input.transcriptId, ctx.user.id);
+        if (!transcript) {
+          throw new TRPCError({
+            code: "NOT_FOUND",
+            message: "Transcript not found",
+          });
+        }
+        return transcript;
+      }),
+    
+    delete: protectedProcedure
+      .input(z.object({ transcriptId: z.number() }))
+      .mutation(async ({ ctx, input }) => {
+        const { deleteVideoTranscript } = await import("./db");
+        await deleteVideoTranscript(input.transcriptId, ctx.user.id);
+        return { success: true };
+      }),
+  }),
 });
 
 export type AppRouter = typeof appRouter;

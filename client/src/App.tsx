@@ -8,6 +8,7 @@ import Home from "./pages/Home";
 import ScriptGenerator from "./pages/ScriptGenerator";
 import ScriptEditor from "./pages/ScriptEditor";
 import ScriptHistory from "./pages/ScriptHistory";
+import VideoToScript from "./pages/VideoToScript";
 
 function Router() {
   // make sure to consider if you need authentication for certain routes
@@ -17,6 +18,7 @@ function Router() {
       <Route path="/generate" component={ScriptGenerator} />
       <Route path="/editor/:id" component={ScriptEditor} />
       <Route path="/history" component={ScriptHistory} />
+      <Route path="/video-to-script" component={VideoToScript} />
       <Route path="/404" component={NotFound} />
       {/* Final fallback route */}
       <Route component={NotFound} />

@@ -40,6 +40,12 @@ export default function Home() {
                   Create Script
                 </Button>
                 <Button
+                  onClick={() => setLocation("/video-to-script")}
+                  className="bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 text-white font-bold uppercase tracking-wider"
+                >
+                  Video to Script
+                </Button>
+                <Button
                   onClick={() => setLocation("/history")}
                   variant="outline"
                   className="border-amber-600 text-amber-100 hover:bg-amber-900/20"
