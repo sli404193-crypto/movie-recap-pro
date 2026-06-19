@@ -200,14 +200,66 @@ Format the script with clear section headers and make it suitable for narration.
         })
       )
       .mutation(async ({ ctx, input }) => {
-        // For now, return a placeholder for transcript extraction
-        // In production, this would use a video-to-text service
-        const placeholderTranscript = "[Extracted transcript will appear here after video processing]";
-        
-        return {
-          rawTranscript: placeholderTranscript,
-          sourceLanguage: input.sourceLanguage,
-        };
+        if (!input.videoUrl && !input.videoFileName) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Please provide either a video URL or upload a video file",
+          });
+        }
+
+        try {
+          const { transcribeAudio } = await import("./_core/voiceTranscription");
+          
+          // If video URL is provided, use it directly for transcription
+          if (input.videoUrl) {
+            // Map language names to ISO codes for Whisper API
+            const languageCodeMap: Record<string, string> = {
+              English: "en",
+              Chinese: "zh",
+              Myanmar: "my",
+            };
+            
+            const transcriptionResult = await transcribeAudio({
+              audioUrl: input.videoUrl,
+              language: languageCodeMap[input.sourceLanguage],
+              prompt: "Transcribe all spoken dialogue and narration exactly as spoken in the video. Include all character dialogue, narration, and important audio cues.",
+            });
+
+            // Check if transcription failed
+            if ("error" in transcriptionResult) {
+              throw new TRPCError({
+                code: "INTERNAL_SERVER_ERROR",
+                message: transcriptionResult.error,
+                cause: transcriptionResult.details,
+              });
+            }
+
+            return {
+              rawTranscript: transcriptionResult.text,
+              sourceLanguage: input.sourceLanguage,
+              detectedLanguage: transcriptionResult.language,
+              duration: transcriptionResult.duration,
+            };
+          } else {
+            // For file uploads, we would need to handle file storage and then transcribe
+            // For now, return an error indicating file uploads need to be uploaded to storage first
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "File uploads should be uploaded to storage first. Please use the video URL option or upload to storage and provide the URL.",
+            });
+          }
+        } catch (error) {
+          console.error("Transcription error:", error);
+          
+          if (error instanceof TRPCError) {
+            throw error;
+          }
+          
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: error instanceof Error ? error.message : "Failed to transcribe video. Please ensure the video URL is valid and contains audio.",
+          });
+        }
       }),
     
     convertToScript: protectedProcedure
@@ -228,33 +280,52 @@ Format the script with clear section headers and make it suitable for narration.
           Myanmar: "Myanmar (Burmese)",
         };
         
-        const prompt = `You are a professional movie recap script writer. Convert the following video dialogue/transcript into a well-structured movie recap script.
+        // Create a dynamic, content-specific prompt that transforms the exact dialogue provided
+        const prompt = `You are a professional movie recap script writer specializing in creating polished, well-structured movie recap scripts from raw video dialogue.
+
+IMPORTANT: You MUST base your script ONLY on the exact dialogue and content provided below. Do not add fictional elements or information not present in the source material.
 
 Source Language: ${languageNames[input.sourceLanguage]}
 Target Language: ${languageNames[input.targetLanguage]}
 
-Original Transcript:
+RAW VIDEO DIALOGUE/TRANSCRIPT:
+---
 ${input.rawTranscript}
+---
 
-Please:
-1. Analyze the dialogue and extract key plot points
-2. Create a structured movie recap script with:
-   - An engaging introduction
-   - Act-by-act breakdown
-   - Key character moments
-   - A compelling conclusion
-3. Write the entire script in ${languageNames[input.targetLanguage]}
-4. Make it suitable for narration
-5. Maintain a professional, cinematic tone
+Your task:
+1. Carefully analyze the provided dialogue to identify:
+   - Main plot points and story arc
+   - Key characters and their roles
+   - Important scenes and moments
+   - Themes and emotional beats
 
-Format with clear section headers.`;
+2. Create a professional movie recap script that:
+   - Opens with an engaging introduction that hooks the viewer
+   - Provides a clear act-by-act breakdown of the story
+   - Highlights key character moments and development
+   - Includes important dialogue snippets where relevant
+   - Concludes with a compelling summary of the film's impact
+
+3. Format requirements:
+   - Use clear section headers (INTRODUCTION, ACT 1, ACT 2, etc., CONCLUSION)
+   - Make it suitable for narration/voice-over
+   - Maintain a professional, cinematic tone
+   - Ensure smooth transitions between sections
+
+4. Language requirement:
+   - Write the ENTIRE script in ${languageNames[input.targetLanguage]}
+   - Preserve the meaning and essence of the original dialogue
+   - Adapt cultural references appropriately for the target language
+
+Generate the movie recap script now:`;
         
         try {
           const response = await invokeLLM({
             messages: [
               {
                 role: "system",
-                content: `You are a professional movie recap script writer who creates engaging, well-structured scripts in multiple languages. You specialize in converting raw dialogue into polished movie recap scripts. Always respond in the target language specified.`,
+                content: `You are an expert movie recap script writer. Your specialty is transforming raw video dialogue and transcripts into polished, professional movie recap scripts. You maintain accuracy to the source material while creating engaging, well-structured narratives suitable for narration. You are fluent in multiple languages and can write compelling scripts in English, Chinese, and Myanmar (Burmese).`,
               },
               {
                 role: "user",
@@ -279,7 +350,7 @@ Format with clear section headers.`;
           if (!generatedScript || generatedScript.length < 50) {
             throw new TRPCError({
               code: "INTERNAL_SERVER_ERROR",
-              message: "Generated script is too short. Please provide a longer transcript.",
+              message: "Generated script is too short. Please provide a longer transcript with more dialogue.",
             });
           }
           
