@@ -54,15 +54,14 @@ export default function VideoToScript() {
   }
 
   const handleExtractTranscript = async () => {
-    if (!videoUrl && !videoFile) {
-      toast.error("Please provide a video URL or file");
+    if (!videoUrl) {
+      toast.error("Please provide a video URL (direct link to audio/video file)");
       return;
     }
 
     try {
       const result = await extractMutation.mutateAsync({
-        videoUrl: videoUrl || undefined,
-        videoFileName: videoFile?.name,
+        videoUrl,
         sourceLanguage,
       });
 
@@ -70,7 +69,9 @@ export default function VideoToScript() {
       setStep("transcript");
       toast.success("Transcript extracted successfully");
     } catch (error) {
-      toast.error("Failed to extract transcript");
+      const errorMessage = error instanceof Error ? error.message : "Failed to extract transcript";
+      toast.error(errorMessage);
+      console.error("Extraction error:", error);
     }
   };
 
@@ -85,7 +86,6 @@ export default function VideoToScript() {
         rawTranscript,
         sourceLanguage,
         targetLanguage,
-        videoFileName: videoFile?.name,
       });
 
       setGeneratedScript(result.generatedScript);
@@ -93,7 +93,9 @@ export default function VideoToScript() {
       setStep("output");
       toast.success("Script generated successfully");
     } catch (error) {
-      toast.error("Failed to convert transcript to script");
+      const errorMessage = error instanceof Error ? error.message : "Failed to convert transcript to script";
+      toast.error(errorMessage);
+      console.error("Conversion error:", error);
     }
   };
 
@@ -193,53 +195,20 @@ ${generatedScript}
           {/* Step 1: Video Input */}
           {step === "input" && (
             <Card className="bg-slate-900/50 border-amber-900/30 backdrop-blur-sm p-8">
-              <h2 className="text-2xl font-bold text-white mb-6 uppercase tracking-wide">Step 1: Upload Video</h2>
-
-              {/* Video Input Type Selector */}
-              <div className="mb-6 flex gap-4">
-                <Button
-                  onClick={() => setVideoInput("url")}
-                  variant={videoInput === "url" ? "default" : "outline"}
-                  className={videoInput === "url" ? "bg-amber-600 hover:bg-amber-700" : "border-amber-600 text-amber-100"}
-                >
-                  Video Link
-                </Button>
-                <Button
-                  onClick={() => setVideoInput("file")}
-                  variant={videoInput === "file" ? "default" : "outline"}
-                  className={videoInput === "file" ? "bg-amber-600 hover:bg-amber-700" : "border-amber-600 text-amber-100"}
-                >
-                  Upload File
-                </Button>
-              </div>
+              <h2 className="text-2xl font-bold text-white mb-6 uppercase tracking-wide">Step 1: Provide Video Link</h2>
 
               {/* Video URL Input */}
-              {videoInput === "url" && (
-                <div className="mb-6">
-                  <Label className="text-amber-200 mb-2 block">Video URL</Label>
-                  <Input
-                    type="url"
-                    placeholder="https://example.com/video.mp4"
-                    value={videoUrl}
-                    onChange={(e) => setVideoUrl(e.target.value)}
-                    className="bg-slate-800/50 border-amber-900/30 text-white placeholder-gray-500"
-                  />
-                </div>
-              )}
-
-              {/* Video File Upload */}
-              {videoInput === "file" && (
-                <div className="mb-6">
-                  <Label className="text-amber-200 mb-2 block">Upload Video File</Label>
-                  <Input
-                    type="file"
-                    accept="video/*"
-                    onChange={(e) => setVideoFile(e.target.files?.[0] || null)}
-                    className="bg-slate-800/50 border-amber-900/30 text-white"
-                  />
-                  {videoFile && <p className="text-amber-100 text-sm mt-2">Selected: {videoFile.name}</p>}
-                </div>
-              )}
+              <div className="mb-6">
+                <Label className="text-amber-200 mb-2 block">Direct Video/Audio URL</Label>
+                <Input
+                  type="url"
+                  placeholder="https://example.com/video.mp4 or https://example.com/audio.mp3"
+                  value={videoUrl}
+                  onChange={(e) => setVideoUrl(e.target.value)}
+                  className="bg-slate-800/50 border-amber-900/30 text-white placeholder-gray-500"
+                />
+                <p className="text-amber-100/60 text-sm mt-2">Supported: Direct links to MP4, MP3, WAV, WebM files (max 16MB). Not supported: YouTube, Vimeo, or other video pages.</p>
+              </div>
 
               {/* Source Language */}
               <div className="mb-6">
@@ -261,16 +230,16 @@ ${generatedScript}
               {/* Extract Button */}
               <Button
                 onClick={handleExtractTranscript}
-                disabled={extractMutation.isPending || (!videoUrl && !videoFile)}
+                disabled={extractMutation.isPending || !videoUrl}
                 className="w-full bg-amber-600 hover:bg-amber-700 text-white font-bold py-3 uppercase tracking-wide"
               >
                 {extractMutation.isPending ? (
                   <>
                     <Spinner className="w-4 h-4 mr-2" />
-                    Extracting...
+                    Extracting Transcript...
                   </>
                 ) : (
-                  "Generate Original Script"
+                  "Extract Transcript"
                 )}
               </Button>
             </Card>

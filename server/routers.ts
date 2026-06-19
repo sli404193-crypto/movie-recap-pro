@@ -195,59 +195,85 @@ Format the script with clear section headers and make it suitable for narration.
       .input(
         z.object({
           videoUrl: z.string().optional(),
-          videoFileName: z.string().optional(),
           sourceLanguage: z.enum(["English", "Chinese", "Myanmar"]).default("English"),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        if (!input.videoUrl && !input.videoFileName) {
+        if (!input.videoUrl) {
           throw new TRPCError({
             code: "BAD_REQUEST",
-            message: "Please provide either a video URL or upload a video file",
+            message: "Please provide a video URL (direct audio/video link, not a webpage)",
           });
         }
 
         try {
-          const { transcribeAudio } = await import("./_core/voiceTranscription");
-          
-          // If video URL is provided, use it directly for transcription
-          if (input.videoUrl) {
-            // Map language names to ISO codes for Whisper API
-            const languageCodeMap: Record<string, string> = {
-              English: "en",
-              Chinese: "zh",
-              Myanmar: "my",
-            };
-            
-            const transcriptionResult = await transcribeAudio({
-              audioUrl: input.videoUrl,
-              language: languageCodeMap[input.sourceLanguage],
-              prompt: "Transcribe all spoken dialogue and narration exactly as spoken in the video. Include all character dialogue, narration, and important audio cues.",
-            });
-
-            // Check if transcription failed
-            if ("error" in transcriptionResult) {
-              throw new TRPCError({
-                code: "INTERNAL_SERVER_ERROR",
-                message: transcriptionResult.error,
-                cause: transcriptionResult.details,
-              });
-            }
-
-            return {
-              rawTranscript: transcriptionResult.text,
-              sourceLanguage: input.sourceLanguage,
-              detectedLanguage: transcriptionResult.language,
-              duration: transcriptionResult.duration,
-            };
-          } else {
-            // For file uploads, we would need to handle file storage and then transcribe
-            // For now, return an error indicating file uploads need to be uploaded to storage first
+          // Validate URL format
+          let urlObj: URL;
+          try {
+            urlObj = new URL(input.videoUrl);
+          } catch {
             throw new TRPCError({
               code: "BAD_REQUEST",
-              message: "File uploads should be uploaded to storage first. Please use the video URL option or upload to storage and provide the URL.",
+              message: "Invalid URL format. Please provide a valid video/audio URL.",
             });
           }
+
+          // Warn about unsupported URL types
+          const unsupportedDomains = ["youtube.com", "youtu.be", "vimeo.com", "facebook.com", "twitter.com", "tiktok.com"];
+          const hostname = urlObj.hostname.toLowerCase();
+          if (unsupportedDomains.some(domain => hostname.includes(domain))) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Video pages (YouTube, Vimeo, etc.) are not supported. Please provide a direct link to an audio or video file (MP3, MP4, WAV, WebM, etc.).",
+            });
+          }
+
+          const { transcribeAudio } = await import("./_core/voiceTranscription");
+          
+          // Map language names to ISO codes for Whisper API
+          const languageCodeMap: Record<string, string> = {
+            English: "en",
+            Chinese: "zh",
+            Myanmar: "my",
+          };
+          
+          console.log(`[Transcription] Starting transcription for URL: ${input.videoUrl.substring(0, 100)}...`);
+          
+          const transcriptionResult = await transcribeAudio({
+            audioUrl: input.videoUrl,
+            language: languageCodeMap[input.sourceLanguage],
+            prompt: "Transcribe all spoken dialogue and narration exactly as spoken in the video. Include all character dialogue, narration, and important audio cues.",
+          });
+
+          // Check if transcription failed
+          if ("error" in transcriptionResult) {
+            console.error(`[Transcription] Error: ${transcriptionResult.error}`, transcriptionResult.details);
+            
+            // Map specific error codes to user-friendly messages
+            let userMessage = transcriptionResult.error;
+            if (transcriptionResult.code === "FILE_TOO_LARGE") {
+              userMessage = "Video file is too large (max 16MB). Please use a shorter video or compressed file.";
+            } else if (transcriptionResult.code === "INVALID_FORMAT") {
+              userMessage = "Invalid audio format or unable to download the file. Ensure the URL points to a valid audio/video file.";
+            } else if (transcriptionResult.code === "TRANSCRIPTION_FAILED") {
+              userMessage = "Transcription service failed. Please try again with a different video.";
+            }
+            
+            throw new TRPCError({
+              code: "INTERNAL_SERVER_ERROR",
+              message: userMessage,
+              cause: transcriptionResult.details,
+            });
+          }
+
+          console.log(`[Transcription] Success! Extracted ${transcriptionResult.text.length} characters`);
+
+          return {
+            rawTranscript: transcriptionResult.text,
+            sourceLanguage: input.sourceLanguage,
+            detectedLanguage: transcriptionResult.language,
+            duration: transcriptionResult.duration,
+          };
         } catch (error) {
           console.error("Transcription error:", error);
           
@@ -257,7 +283,7 @@ Format the script with clear section headers and make it suitable for narration.
           
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: error instanceof Error ? error.message : "Failed to transcribe video. Please ensure the video URL is valid and contains audio.",
+            message: error instanceof Error ? error.message : "Failed to transcribe video. Please ensure the URL is valid and contains audio.",
           });
         }
       }),
@@ -321,6 +347,8 @@ Your task:
 Generate the movie recap script now:`;
         
         try {
+          console.log(`[Script Generation] Starting conversion from ${input.sourceLanguage} to ${input.targetLanguage}`);
+          
           const response = await invokeLLM({
             messages: [
               {
@@ -355,6 +383,8 @@ Generate the movie recap script now:`;
           }
           
           const wordCount = generatedScript.split(/\s+/).length;
+          
+          console.log(`[Script Generation] Success! Generated ${wordCount} words`);
           
           // Save to database
           const { createVideoTranscript } = await import("./db");
