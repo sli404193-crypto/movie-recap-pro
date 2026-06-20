@@ -15,13 +15,6 @@
       "when": 1781696733033,
       "tag": "0001_noisy_young_avengers",
       "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "5",
-      "when": 1781799609522,
-      "tag": "0002_heavy_cable",
-      "breakpoints": true
     }
   ]
 }

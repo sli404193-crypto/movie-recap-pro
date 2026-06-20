@@ -42,20 +42,3 @@ export const scripts = mysqlTable("scripts", {
 
 export type Script = typeof scripts.$inferSelect;
 export type InsertScript = typeof scripts.$inferInsert;
-
-export const videoTranscripts = mysqlTable("videoTranscripts", {
-  id: int("id").autoincrement().primaryKey(),
-  userId: int("userId").notNull(),
-  videoUrl: varchar("videoUrl", { length: 512 }),
-  videoFileName: varchar("videoFileName", { length: 255 }),
-  sourceLanguage: mysqlEnum("sourceLanguage", ["English", "Chinese", "Myanmar"]).default("English").notNull(),
-  targetLanguage: mysqlEnum("targetLanguage", ["English", "Chinese", "Myanmar"]).default("English").notNull(),
-  rawTranscript: text("rawTranscript").notNull(),
-  generatedScript: text("generatedScript").notNull(),
-  wordCount: int("wordCount").notNull(),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
-
-export type VideoTranscript = typeof videoTranscripts.$inferSelect;
-export type InsertVideoTranscript = typeof videoTranscripts.$inferInsert;

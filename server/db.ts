@@ -1,6 +1,6 @@
 import { and, desc, eq } from "drizzle-orm";
 import { drizzle } from "drizzle-orm/mysql2";
-import { InsertScript, InsertUser, InsertVideoTranscript, scripts, users, videoTranscripts } from "../drizzle/schema";
+import { InsertScript, InsertUser, scripts, users } from "../drizzle/schema";
 import { ENV } from './_core/env';
 
 let _db: ReturnType<typeof drizzle> | null = null;
@@ -146,65 +146,6 @@ export async function deleteScript(scriptId: number, userId: number) {
   return await db
     .delete(scripts)
     .where(and(eq(scripts.id, scriptId), eq(scripts.userId, userId)));
-}
-
-export async function createVideoTranscript(transcript: InsertVideoTranscript) {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  const result = await db.insert(videoTranscripts).values(transcript);
-  return result;
-}
-
-export async function getUserVideoTranscripts(userId: number) {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  return await db
-    .select()
-    .from(videoTranscripts)
-    .where(eq(videoTranscripts.userId, userId))
-    .orderBy((t) => desc(t.createdAt));
-}
-
-export async function getVideoTranscriptById(transcriptId: number, userId: number) {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  const result = await db
-    .select()
-    .from(videoTranscripts)
-    .where(and(eq(videoTranscripts.id, transcriptId), eq(videoTranscripts.userId, userId)))
-    .limit(1);
-  return result.length > 0 ? result[0] : undefined;
-}
-
-export async function updateVideoTranscript(
-  transcriptId: number,
-  userId: number,
-  updates: Partial<InsertVideoTranscript>
-) {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  return await db
-    .update(videoTranscripts)
-    .set(updates)
-    .where(and(eq(videoTranscripts.id, transcriptId), eq(videoTranscripts.userId, userId)));
-}
-
-export async function deleteVideoTranscript(transcriptId: number, userId: number) {
-  const db = await getDb();
-  if (!db) {
-    throw new Error("Database not available");
-  }
-  return await db
-    .delete(videoTranscripts)
-    .where(and(eq(videoTranscripts.id, transcriptId), eq(videoTranscripts.userId, userId)));
 }
 
 // TODO: add additional feature queries here as your schema grows.

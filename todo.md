@@ -49,16 +49,6 @@
 
 ## Phase 2: Advanced Features & Refinements
 
-### Video-to-Script Conversion (NEW FEATURE)
-- [x] Implement video URL input and validation
-- [x] Integrate Whisper API for real audio transcription
-- [x] Create 3-step workflow (Input → Transcript → Output)
-- [x] Implement editable transcript text area (Step 2)
-- [x] Add multi-language support (English, Chinese, Myanmar)
-- [x] Implement LLM-based dialogue-to-script conversion
-- [x] Add proper error handling and user-friendly messages
-- [x] Create comprehensive test suite for video features
-
 ### Enhanced Script Generation
 - [ ] Add character analysis to generated scripts
 - [ ] Implement scene breakdown with timestamps
