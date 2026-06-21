@@ -4,12 +4,15 @@ import { z } from "zod";
 import { getSessionCookieOptions } from "./_core/cookies";
 import { systemRouter } from "./_core/systemRouter";
 import { protectedProcedure, publicProcedure, router } from "./_core/trpc";
+import { extractAudioFromFile, extractAudioFromUrl, isSupportedVideoUrl, getPlatformName } from "./_core/videoProcessing";
+import { transcribeAudio } from "./_core/voiceTranscription";
+import { invokeLLM } from "./_core/llm";
+import { getDb, getUserVideoTranscripts, deleteVideoTranscript } from "./db";
 
 export const appRouter = router({
-    // if you need to use socket.io, read and register route in server/_core/index.ts, all api should start with '/api/' so that the gateway can route correctly
   system: systemRouter,
   auth: router({
-    me: publicProcedure.query(opts => opts.ctx.user),
+    me: publicProcedure.query((opts) => opts.ctx.user),
     logout: publicProcedure.mutation(({ ctx }) => {
       const cookieOptions = getSessionCookieOptions(ctx.req);
       ctx.res.clearCookie(COOKIE_NAME, { ...cookieOptions, maxAge: -1 });
@@ -32,8 +35,6 @@ export const appRouter = router({
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const { invokeLLM } = await import("./_core/llm");
-        
         // Calculate target word count based on length
         const wordCountMap = {
           Short: 600,
@@ -41,40 +42,39 @@ export const appRouter = router({
           Long: 2400,
         };
         const targetWordCount = wordCountMap[input.length];
-        
+
         // Create prompt based on tone and parameters
         const toneDescriptions = {
           Dramatic: "dramatic, intense, and emotionally compelling",
           Comedic: "humorous, witty, and entertaining",
           Suspenseful: "suspenseful, thrilling, and mysterious",
           Educational: "informative, analytical, and insightful",
-          Casual: "conversational, relaxed, and approachable",
+          Casual: "casual, conversational, and approachable",
         };
-        
-        const prompt = `You are a professional movie recap script writer. Generate a ${toneDescriptions[input.tone]} movie recap script for the following movie:
 
-Title: ${input.movieTitle}
-Year: ${input.year || "Unknown"}
+        const prompt = `You are a professional movie recap script writer. Create a compelling movie recap script for:
+
+Movie: ${input.movieTitle}${input.year ? ` (${input.year})` : ""}
 Genre: ${input.genre || "Unknown"}
 Plot Summary: ${input.plotSummary}
 
-Write a comprehensive recap script that includes:
-1. An engaging introduction that hooks the viewer
-2. Act-by-act breakdown of the main plot points
-3. Key character moments and development
-4. A compelling conclusion that summarizes the film's impact
+Style: Write in a ${toneDescriptions[input.tone]} tone.
+Target Length: Approximately ${targetWordCount} words.
 
-Target length: approximately ${targetWordCount} words
-Tone: ${input.tone}
+Structure the script with:
+1. OPENING - Hook the audience with an intriguing introduction
+2. ACT BREAKDOWN - Cover the main plot points and character arcs
+3. CLIMAX - Highlight the turning point and resolution
+4. CLOSING - End with a memorable conclusion
 
-Format the script with clear section headers and make it suitable for narration. Ensure the script is engaging and maintains the ${input.tone} tone throughout.`;
-        
+Make it engaging, well-paced, and suitable for a movie recap video. Use clear section headers.`;
+
         try {
           const response = await invokeLLM({
             messages: [
               {
                 role: "system",
-                content: "You are a professional movie recap script writer who creates engaging, well-structured scripts for various tones and audiences.",
+                content: "You are an expert movie recap script writer who creates engaging, well-structured scripts for video content.",
               },
               {
                 role: "user",
@@ -82,112 +82,302 @@ Format the script with clear section headers and make it suitable for narration.
               },
             ],
           });
-          
-          const content = response.choices[0]?.message.content;
-          let generatedScript = "";
-          
-          if (typeof content === "string") {
-            generatedScript = content.trim();
-          } else if (Array.isArray(content)) {
-            // Handle array of content blocks
-            generatedScript = content
-              .filter((block: any) => block.type === "text")
-              .map((block: any) => block.text)
-              .join("\n")
-              .trim();
+
+          const scriptContent = typeof response.choices[0]?.message.content === 'string' 
+            ? response.choices[0].message.content 
+            : "";
+          if (!scriptContent) {
+            throw new Error("Failed to generate script content");
           }
-          
-          // Validate that we got meaningful content
-          if (!generatedScript || generatedScript.length < 50) {
-            throw new TRPCError({
-              code: "INTERNAL_SERVER_ERROR",
-              message: "Generated script is too short or empty. Please try again with more detailed plot information.",
-            });
+
+          const wordCount = scriptContent.split(/\s+/).length;
+
+          // Save to database
+          const db = await getDb();
+          if (db) {
+            const { scripts } = await import("../drizzle/schema");
+            await db.insert(scripts).values([
+              {
+                userId: ctx.user.id,
+                movieTitle: input.movieTitle,
+                year: input.year || undefined,
+                genre: input.genre || undefined,
+                plotSummary: input.plotSummary,
+                tone: input.tone,
+                length: input.length,
+                generatedScript: scriptContent,
+                wordCount,
+              },
+            ]);
           }
-          
-          const wordCount = generatedScript.split(/\s+/).length;
-          
-          // Save script to database
-          const { createScript } = await import("./db");
-          await createScript({
-            userId: ctx.user.id,
-            movieTitle: input.movieTitle,
-            year: input.year,
-            genre: input.genre,
-            plotSummary: input.plotSummary,
-            tone: input.tone,
-            length: input.length,
-            generatedScript,
-            wordCount,
-          });
-          
+
           return {
-            generatedScript,
+            script: scriptContent,
             wordCount,
-            movieTitle: input.movieTitle,
           };
         } catch (error) {
-          console.error("Script generation error:", error);
-          
-          // Re-throw if it's already a TRPCError
-          if (error instanceof TRPCError) {
-            throw error;
-          }
-          
+          console.error("[Script Generation Error]", error);
           throw new TRPCError({
             code: "INTERNAL_SERVER_ERROR",
-            message: error instanceof Error ? error.message : "Failed to generate script. Please try again.",
+            message: "Failed to generate script. Please try again.",
           });
         }
       }),
-    
+
     list: protectedProcedure.query(async ({ ctx }) => {
-      const { getUserScripts } = await import("./db");
-      return await getUserScripts(ctx.user.id);
+      const db = await getDb();
+      if (!db) return [];
+
+      const { scripts } = await import("../drizzle/schema");
+      const { eq } = await import("drizzle-orm");
+
+      const result = await db
+        .select()
+        .from(scripts)
+        .where(eq(scripts.userId, ctx.user.id))
+        .orderBy((t) => t.createdAt);
+
+      return result;
     }),
-    
-    getById: protectedProcedure
-      .input(z.object({ scriptId: z.number() }))
-      .query(async ({ ctx, input }) => {
-        const { getScriptById } = await import("./db");
-        const script = await getScriptById(input.scriptId, ctx.user.id);
-        if (!script) {
-          throw new TRPCError({
-            code: "NOT_FOUND",
-            message: "Script not found",
-          });
-        }
-        return script;
-      }),
-    
-    update: protectedProcedure
+
+    getById: protectedProcedure.input(z.object({ scriptId: z.number() })).query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return null;
+
+      const { scripts } = await import("../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+
+      const result = await db
+        .select()
+        .from(scripts)
+        .where(and(eq(scripts.id, input.scriptId), eq(scripts.userId, ctx.user.id)))
+        .limit(1);
+
+      return result[0] || null;
+    }),
+
+    delete: protectedProcedure.input(z.object({ scriptId: z.number() })).mutation(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) throw new TRPCError({ code: "INTERNAL_SERVER_ERROR", message: "Database unavailable" });
+
+      const { scripts } = await import("../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+
+      await db
+        .delete(scripts)
+        .where(and(eq(scripts.id, input.scriptId), eq(scripts.userId, ctx.user.id)));
+
+      return { success: true };
+    }),
+  }),
+
+  videoTranscripts: router({
+    extractTranscript: protectedProcedure
       .input(
         z.object({
-          scriptId: z.number(),
-          generatedScript: z.string().optional(),
+          videoUrl: z.string().optional(),
+          sourceLanguage: z.enum(["English", "Chinese", "Myanmar"]).default("English"),
         })
       )
       .mutation(async ({ ctx, input }) => {
-        const { updateScript } = await import("./db");
-        const updates: Record<string, any> = {};
-        
-        if (input.generatedScript) {
-          updates.generatedScript = input.generatedScript;
-          updates.wordCount = input.generatedScript.split(/\s+/).length;
+        if (!input.videoUrl) {
+          throw new TRPCError({
+            code: "BAD_REQUEST",
+            message: "Video URL or file upload is required",
+          });
         }
-        
-        await updateScript(input.scriptId, ctx.user.id, updates);
-        
-        return { success: true };
+
+        try {
+          let audioBuffer: Buffer;
+          let platform = "Direct URL";
+
+          // Check if it's a supported video platform URL
+          if (isSupportedVideoUrl(input.videoUrl)) {
+            platform = getPlatformName(input.videoUrl);
+            console.log(`[Video Processing] Extracting audio from ${platform}: ${input.videoUrl}`);
+            audioBuffer = await extractAudioFromUrl(input.videoUrl, "mp3");
+          } else {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: `Unsupported video URL. Please provide a direct video link or a supported platform URL (YouTube, TikTok, Instagram, etc.)`,
+            });
+          }
+
+          // Transcribe audio using Whisper API
+          console.log(`[Transcription] Starting transcription for ${platform} video...`);
+
+          // Create a temporary file-like object for transcription
+          const audioUrl = `data:audio/mp3;base64,${audioBuffer.toString("base64")}`;
+
+          const transcription = await transcribeAudio({
+            audioUrl,
+            language: input.sourceLanguage === "English" ? "en" : input.sourceLanguage === "Chinese" ? "zh" : "my",
+          });
+
+          if ('error' in transcription) {
+            throw new Error(`Transcription failed: ${transcription.error}`);
+          }
+
+          if (!transcription.text) {
+            throw new Error("No transcription text returned");
+          }
+
+          console.log(`[Transcription] Successfully transcribed ${transcription.text.split(" ").length} words`);
+
+          return {
+            transcript: transcription.text,
+            language: input.sourceLanguage,
+            platform,
+          };
+        } catch (error) {
+          console.error("[Video Processing Error]", error);
+
+          const errorMessage = error instanceof Error ? error.message : String(error);
+
+          if (errorMessage.includes("FILE_TOO_LARGE")) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Video file is too large (max 16MB). Please use a shorter video.",
+            });
+          }
+
+          if (errorMessage.includes("INVALID_FORMAT")) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: "Invalid audio format or unable to download video. Please try another link.",
+            });
+          }
+
+          if (errorMessage.includes("not supported")) {
+            throw new TRPCError({
+              code: "BAD_REQUEST",
+              message: errorMessage,
+            });
+          }
+
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `Failed to extract transcript: ${errorMessage}`,
+          });
+        }
       }),
-    
-    delete: protectedProcedure
-      .input(z.object({ scriptId: z.number() }))
+
+    convertToScript: protectedProcedure
+      .input(
+        z.object({
+          rawTranscript: z.string().min(50, "Transcript must be at least 50 characters"),
+          sourceLanguage: z.enum(["English", "Chinese", "Myanmar"]).default("English"),
+          targetLanguage: z.enum(["English", "Chinese", "Myanmar"]).default("English"),
+        })
+      )
       .mutation(async ({ ctx, input }) => {
-        const { deleteScript } = await import("./db");
-        await deleteScript(input.scriptId, ctx.user.id);
-        return { success: true };
+        try {
+          const languageNames = {
+            English: "English",
+            Chinese: "Chinese",
+            Myanmar: "Myanmar (Burmese)",
+          };
+
+          const prompt = `You are a professional movie recap script writer. Transform the following raw video dialogue/transcript into a well-structured, engaging movie recap script.
+
+SOURCE LANGUAGE: ${languageNames[input.sourceLanguage]}
+TARGET LANGUAGE: ${languageNames[input.targetLanguage]}
+
+RAW TRANSCRIPT:
+${input.rawTranscript}
+
+Please create a professional movie recap script that:
+1. Summarizes the key plot points from the dialogue
+2. Maintains the narrative flow and emotional beats
+3. Is written in ${languageNames[input.targetLanguage]}
+4. Includes clear section headers (INTRO, ACT 1, ACT 2, CLIMAX, CONCLUSION)
+5. Is suitable for a movie recap video
+6. Is approximately 800-1200 words
+
+Format the output with clear sections and make it engaging and well-paced.`;
+
+          console.log(`[Script Generation] Converting transcript to ${languageNames[input.targetLanguage]} recap script...`);
+
+          const response = await invokeLLM({
+            messages: [
+              {
+                role: "system",
+                content: `You are an expert movie recap script writer who creates engaging, well-structured scripts in multiple languages. You are fluent in ${languageNames[input.sourceLanguage]} and ${languageNames[input.targetLanguage]}.`,
+              },
+              {
+                role: "user",
+                content: prompt,
+              },
+            ],
+          });
+
+          const scriptContent = typeof response.choices[0]?.message.content === 'string' 
+            ? response.choices[0].message.content 
+            : "";
+          if (!scriptContent) {
+            throw new Error("Failed to generate script content");
+          }
+
+          const wordCount = scriptContent.split(/\s+/).length;
+
+          // Save to database
+          const db = await getDb();
+          if (db) {
+            const { videoTranscripts } = await import("../drizzle/schema");
+            await db.insert(videoTranscripts).values([
+              {
+                userId: ctx.user.id,
+                videoUrl: null,
+                videoFileName: undefined,
+                sourceLanguage: input.sourceLanguage,
+                targetLanguage: input.targetLanguage,
+                rawTranscript: input.rawTranscript,
+                generatedScript: scriptContent,
+                wordCount,
+              },
+            ]);
+          }
+
+          console.log(`[Script Generation] Successfully generated ${wordCount} word script`);
+
+          return {
+            script: scriptContent,
+            wordCount,
+            language: input.targetLanguage,
+          };
+        } catch (error) {
+          console.error("[Script Conversion Error]", error);
+          throw new TRPCError({
+            code: "INTERNAL_SERVER_ERROR",
+            message: `Failed to convert transcript to script: ${error instanceof Error ? error.message : String(error)}`,
+          });
+        }
       }),
+
+    list: protectedProcedure.query(async ({ ctx }) => {
+      return await getUserVideoTranscripts(ctx.user.id);
+    }),
+
+    getById: protectedProcedure.input(z.object({ transcriptId: z.number() })).query(async ({ ctx, input }) => {
+      const db = await getDb();
+      if (!db) return null;
+
+      const { videoTranscripts } = await import("../drizzle/schema");
+      const { eq, and } = await import("drizzle-orm");
+
+      const result = await db
+        .select()
+        .from(videoTranscripts)
+        .where(and(eq(videoTranscripts.id, input.transcriptId), eq(videoTranscripts.userId, ctx.user.id)))
+        .limit(1);
+
+      return result[0] || null;
+    }),
+
+    delete: protectedProcedure.input(z.object({ transcriptId: z.number() })).mutation(async ({ ctx, input }) => {
+      await deleteVideoTranscript(input.transcriptId, ctx.user.id);
+      return { success: true };
+    }),
   }),
 });
 

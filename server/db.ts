@@ -149,3 +149,51 @@ export async function deleteScript(scriptId: number, userId: number) {
 }
 
 // TODO: add additional feature queries here as your schema grows.
+
+// Video Transcript Functions
+export async function getUserVideoTranscripts(userId: number) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  const { videoTranscripts } = await import("../drizzle/schema");
+  return await db
+    .select()
+    .from(videoTranscripts)
+    .where(eq(videoTranscripts.userId, userId))
+    .orderBy((vt) => desc(vt.createdAt));
+}
+
+export async function getVideoTranscriptById(transcriptId: number, userId: number) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  const { videoTranscripts } = await import("../drizzle/schema");
+  const result = await db
+    .select()
+    .from(videoTranscripts)
+    .where(and(eq(videoTranscripts.id, transcriptId), eq(videoTranscripts.userId, userId)))
+    .limit(1);
+  return result.length > 0 ? result[0] : undefined;
+}
+
+export async function saveVideoTranscript(data: any) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  const { videoTranscripts } = await import("../drizzle/schema");
+  return await db.insert(videoTranscripts).values(data);
+}
+
+export async function deleteVideoTranscript(transcriptId: number, userId: number) {
+  const db = await getDb();
+  if (!db) {
+    throw new Error("Database not available");
+  }
+  const { videoTranscripts } = await import("../drizzle/schema");
+  return await db
+    .delete(videoTranscripts)
+    .where(and(eq(videoTranscripts.id, transcriptId), eq(videoTranscripts.userId, userId)));
+}

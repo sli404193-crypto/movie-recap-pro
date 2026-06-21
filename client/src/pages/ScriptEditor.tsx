@@ -23,15 +23,7 @@ export default function ScriptEditor() {
     { enabled: !!scriptId }
   );
   
-  const updateMutation = trpc.scripts.update.useMutation({
-    onSuccess: () => {
-      toast.success("Script updated successfully!");
-      setIsEditing(false);
-    },
-    onError: (error) => {
-      toast.error(error.message || "Failed to update script");
-    },
-  });
+  // Update mutation removed - not implemented in backend
 
   useEffect(() => {
     if (scriptData) {
@@ -112,11 +104,8 @@ ${script}
   };
 
   const handleSave = () => {
-    if (!scriptId) return;
-    updateMutation.mutate({
-      scriptId,
-      generatedScript: script,
-    });
+    // Save functionality not implemented - scripts are read-only after generation
+    toast.info("Scripts are read-only. Download to save changes locally.");
   };
 
   if (!user) {
@@ -195,23 +184,15 @@ ${script}
               variant="outline"
               className="border-amber-600 text-amber-100 hover:bg-amber-900/20"
             >
-              {isEditing ? "View Mode" : "Edit Mode"}
+              {isEditing ? "View Mode" : "Edit Mode (View Only)"}
             </Button>
             
             {isEditing && (
               <Button
                 onClick={handleSave}
-                disabled={updateMutation.isPending}
-                className="bg-green-600 hover:bg-green-700 text-white"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
               >
-                {updateMutation.isPending ? (
-                  <>
-                    <Spinner className="w-4 h-4 mr-2" />
-                    Saving...
-                  </>
-                ) : (
-                  "Save Changes"
-                )}
+                Download to Save
               </Button>
             )}
             
