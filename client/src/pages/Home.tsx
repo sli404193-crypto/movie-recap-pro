@@ -3,7 +3,7 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { getLoginUrl } from "@/const";
 import { useLocation } from "wouter";
-import { Film, Sparkles, Clock, Download } from "lucide-react";
+import { Film, Sparkles, Clock, Download, Video } from "lucide-react";
 
 export default function Home() {
   const { user, isAuthenticated } = useAuth();
@@ -38,6 +38,14 @@ export default function Home() {
                   className="bg-gradient-to-r from-amber-600 to-amber-500 hover:from-amber-700 hover:to-amber-600 text-white font-bold uppercase tracking-wider"
                 >
                   Create Script
+                </Button>
+                <Button
+                  onClick={() => setLocation("/video-to-script")}
+                  variant="outline"
+                  className="border-amber-600 text-amber-100 hover:bg-amber-900/20"
+                >
+                  <Video className="w-4 h-4 mr-2" />
+                  Video to Script
                 </Button>
                 <Button
                   onClick={() => setLocation("/history")}
